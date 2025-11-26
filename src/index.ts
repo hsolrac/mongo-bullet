@@ -1,19 +1,29 @@
+import pino from "pino";
+const logger = pino();
+
+
 console.log("Hello from mongo-bullet!");
 
 export const analiseQuery = (connection: any) => {
   connection.on('commandStarted', (event: any) => {
-    console.log('[MongoDB] START:', {
+    const collection =
+      event.command[event.commandName] ||
+      event.command?.collection;
+
+    logger.info({
+      type: "START",
       command: event.commandName,
-      collection: event.command?.find || event.command?.aggregate,
+      collection,
       filter: event.command?.filter,
-      pipeline: event.command?.pipeline,
+      pipeline: event.command?.pipeline
     });
   });
 
   connection.on('commandFailed', (event: any) => {
-    console.log('[MongoDB] FAIL:', {
+    logger.error({
+      type: "FAIL",
       command: event.commandName,
-      failure: event.failure,
+      failure: event.failure
     });
   });
 }

@@ -24,7 +24,8 @@
   "license": "ISC",
   "packageManager": "pnpm@10.15.1",
   "dependencies": {
-    "mongodb": "^6.20.0"
+    "mongodb": "^6.20.0",
+    "pino": "^10.1.0"
   },
   "devDependencies": {
     "@types/node": "^24.9.1",
