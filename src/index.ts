@@ -1,50 +1,65 @@
 import pino from "pino";
-import pretty from 'pino-pretty'
+import pretty from "pino-pretty";
 
 const logger = pino(pretty({ sync: true }));
 
-logger.info("Hello from mongo-bullet!");
-
 const SLOW_THRESHOLD = 100;
 
-const filterQueries = new Set();
+const pendingCommands: Record<number, any> = {};
+
+const seen = new Set<string>();
 
 export const initializeMongoBullet = (connection: any) => {
-  connection.on("commandSucceeded", (event: any) => {
-
-    if (event.duration < SLOW_THRESHOLD) return;
-
+  logger.info(" ===== Mongo bullet started ==== ")
+  connection.on("commandStarted", (event: any) => {
     const command = event.commandName;
- 
-    const relevant =
-      ["find", "aggregate", "update", "insert", "delete"].includes(command);
 
-    if (!relevant) return;
+    if (!["find", "aggregate", "update", "insert", "delete"].includes(command))
+      return;
 
-    const reply = event.reply;
+    pendingCommands[event.requestId] = {
+      command,
+      startedAt: Date.now(),
+      filter: event.command?.filter,
+      pipeline: event.command?.pipeline,
+      sort: event.command?.sort,
+      collection:
+        event.command?.find ||
+        event.command?.aggregate ||
+        event.command?.update ||
+        event.command?.delete
+    };
+  });
 
-    const collection =
-      reply?.cursor?.ns?.split(".")[1] ||
-      event.command?.collection ||
-      event.command?.[command];
+  connection.on("commandSucceeded", (event: any) => {
+    const data = pendingCommands[event.requestId];
+    if (!data) return;
 
-    filterQueries.add({
-      collection, 
-      duration: event.duration, 
-      command
-    })
+    const duration = event.duration;
+    if (duration < SLOW_THRESHOLD) {
+      delete pendingCommands[event.requestId];
+      return;
+    }
 
-    if (filterQueries.has({
-      collection, 
-      duration: event.duration, 
-      command
-    })) return
+    const key = `${data.collection}:${data.command}:${duration}`;
+    if (seen.has(key)) {
+      delete pendingCommands[event.requestId];
+      return;
+    }
+
+    seen.add(key);
 
     logger.warn({
       type: "SLOW_QUERY",
-      command,
-      collection,
-      duration: `${event.duration}ms`,
+      command: data.command,
+      collection: data.collection,
+      duration: `${duration}ms`,
+      filter: data.filter,
+      pipeline: data.pipeline,
+      sort: data.sort
     });
+
+    delete pendingCommands[event.requestId];
   });
 };
+;
