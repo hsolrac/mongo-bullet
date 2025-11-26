@@ -1,29 +1,50 @@
 import pino from "pino";
-const logger = pino();
+import pretty from 'pino-pretty'
 
+const logger = pino(pretty({ sync: true }));
 
-console.log("Hello from mongo-bullet!");
+logger.info("Hello from mongo-bullet!");
 
-export const analiseQuery = (connection: any) => {
-  connection.on('commandStarted', (event: any) => {
+const SLOW_THRESHOLD = 100;
+
+const filterQueries = new Set();
+
+export const initializeMongoBullet = (connection: any) => {
+  connection.on("commandSucceeded", (event: any) => {
+
+    if (event.duration < SLOW_THRESHOLD) return;
+
+    const command = event.commandName;
+ 
+    const relevant =
+      ["find", "aggregate", "update", "insert", "delete"].includes(command);
+
+    if (!relevant) return;
+
+    const reply = event.reply;
+
     const collection =
-      event.command[event.commandName] ||
-      event.command?.collection;
+      reply?.cursor?.ns?.split(".")[1] ||
+      event.command?.collection ||
+      event.command?.[command];
 
-    logger.info({
-      type: "START",
-      command: event.commandName,
+    filterQueries.add({
+      collection, 
+      duration: event.duration, 
+      command
+    })
+
+    if (filterQueries.has({
+      collection, 
+      duration: event.duration, 
+      command
+    })) return
+
+    logger.warn({
+      type: "SLOW_QUERY",
+      command,
       collection,
-      filter: event.command?.filter,
-      pipeline: event.command?.pipeline
+      duration: `${event.duration}ms`,
     });
   });
-
-  connection.on('commandFailed', (event: any) => {
-    logger.error({
-      type: "FAIL",
-      command: event.commandName,
-      failure: event.failure
-    });
-  });
-}
+};
