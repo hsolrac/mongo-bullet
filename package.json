@@ -25,7 +25,8 @@
   "packageManager": "pnpm@10.15.1",
   "dependencies": {
     "mongodb": "^6.20.0",
-    "pino": "^10.1.0"
+    "pino": "^10.1.0",
+    "pino-pretty": "^13.1.2"
   },
   "devDependencies": {
     "@types/node": "^24.9.1",
